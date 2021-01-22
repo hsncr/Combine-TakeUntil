@@ -1,6 +1,6 @@
 # Combine-TakeUntil implementation
 
-
+```swift
 let expectation = self.expectation(description: "Done")
 
 let scheduler = DispatchQueue.testScheduler
@@ -45,3 +45,5 @@ scheduler.advance(by: 3)
 
 withExtendedLifetime(cancellable) { wait(for: [expectation], timeout: 5.0) }
 XCTAssertEqual(received, [0,1].asEvents(completion: .finished))
+```
+
