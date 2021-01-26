@@ -563,4 +563,60 @@ class TakeUntilTests: XCTestCase {
         withExtendedLifetime(cancellable) { wait(for: [expectation], timeout: 5.0) }
         XCTAssertEqual(received, [0,1].asEvents())
     }
+    
+    func testTakeUntilCustomDemand() {
+        
+        let expectation = self.expectation(description: "Done")
+        
+        let scheduler = DispatchQueue.testScheduler
+        
+        let source = (0...10).publisher
+        
+        let sourcePublisher = source.print("Source").subscribe(on: scheduler)
+        
+        let finisher = PassthroughSubject<Void, Never>()
+        
+        let finisherPublisher = finisher.print("Finisher").subscribe(on: scheduler)
+        
+        var received = [Subscribers.Event<Int, Never>]()
+        
+        var subscription: Subscription?
+        
+        scheduler.schedule(after: scheduler.now.advanced(by: 1)) {
+            subscription?.request(.max(1))
+        }
+        
+        scheduler.schedule(after: scheduler.now.advanced(by: 2)) {
+            subscription?.request(.max(1))
+        }
+        
+        scheduler.schedule(after: scheduler.now.advanced(by: 3)) {
+            finisher.send(completion: .finished)
+        }
+        
+        
+        scheduler.schedule(after: scheduler.now.advanced(by: 3.5)) {
+            subscription?.request(.max(3))
+        }
+        
+        sourcePublisher.take(until: finisherPublisher)
+            .print("TakeUntil")
+            .subscribe(on: scheduler)
+            .subscribe(AnySubscriber(receiveSubscription: { subs in
+                subscription = subs
+                subs.request(.max(2))
+            }, receiveValue: { event -> Subscribers.Demand in
+                received.append(.value(event))
+                return .none
+            }, receiveCompletion: { completion in
+                received.append(.complete(completion))
+                expectation.fulfill()
+            }))
+        
+        
+        scheduler.advance(by: 4)
+        
+        withExtendedLifetime(subscription) { wait(for: [expectation], timeout: 5.0) }
+        XCTAssertEqual(received, [0,1,2,3].asEvents(completion: .finished))
+    }
 }
