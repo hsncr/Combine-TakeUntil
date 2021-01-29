@@ -158,7 +158,7 @@ extension Publishers.TakeUntil {
 
         // received value from source publisher, handle it
         private func receivedSource(_ value: Output) {
-            lock.synchronized {  () -> (() -> Void)? in
+            lock.synchronized { 
                 
                 if case var .observing(container) = state {
                     
