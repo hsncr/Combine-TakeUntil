@@ -158,20 +158,34 @@ extension Publishers.TakeUntil {
 
         // received value from source publisher, handle it
         private func receivedSource(_ value: Output) {
-            return lock.synchronize { () -> Void in
+            lock.synchronized {  () -> (() -> Void)? in
                 
                 if case var .observing(container) = state {
                     
                     // if demands are still incomplete, pass value to downstream subscriber. otherwise ignore
                     if container.remainingDemand > .none {
+                        
                         let additional = container.downstream.receive(value)
+                        
                         container.remainingDemand += additional
+                        
                         container.remainingDemand -= 1
+                        
+                        if additional > .none {
+                            
+                            state = .observing(container)
+                            
+                            return { container.sink.requestDemand(additional) }
+                        }
+                        
+                        state = .observing(container)
+                        
                     }
-
+                    
                     state = .observing(container)
                 }
-
+                
+                return {}
             }
         }
         
@@ -199,6 +213,7 @@ extension Publishers.TakeUntil {
         // Received value from other publisher, cancel both publishers and send completion event.
         private func receiveUntil(_ value: Other.Output) {
             lock.synchronized {
+                
                 if case let .observing(container) = state {
                     
                     let sourceCancellable = self.sourceCancellable
@@ -222,6 +237,7 @@ extension Publishers.TakeUntil {
         // Received completion from other publisher, cancel source publisher and send completion event.
         private func receiveUntil(_ completion: Subscribers.Completion<Other.Failure>) {
             lock.synchronized {
+                
                 if case let .observing(container) = state {
 
                     let sourceCancellable = self.sourceCancellable
