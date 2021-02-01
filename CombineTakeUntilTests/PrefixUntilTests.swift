@@ -695,4 +695,42 @@ class PrefixUntilTests: XCTestCase {
         withExtendedLifetime(subscription) { wait(for: [expectation], timeout: 5.0) }
         XCTAssertEqual(received, [0,1,2,3,4].asEvents(completion: .finished))
     }
+    
+    func testTakeUntilCustomDemandNoneInitially() {
+        
+        let expectation = self.expectation(description: "Done")
+        
+        let scheduler = DispatchQueue.testScheduler
+        
+        let source = (0...10).publisher
+        
+        let sourcePublisher = source.print("Source").subscribe(on: scheduler)
+        
+        let finisher = CurrentValueSubject<Void, Never>(())
+        
+        let finisherPublisher = finisher.print("Finisher").subscribe(on: scheduler)
+        
+        var received = [Subscribers.Event<Int, Never>]()
+        
+        var subscription: Subscription?
+        
+        sourcePublisher.take(until: finisherPublisher)
+            .print("TakeUntil")
+            .subscribe(on: scheduler)
+            .subscribe(AnySubscriber(receiveSubscription: { subs in
+                subscription = subs
+                subs.request(.none)
+            }, receiveValue: { event -> Subscribers.Demand in
+                received.append(.value(event))
+                return .none
+            }, receiveCompletion: { completion in
+                received.append(.complete(completion))
+                expectation.fulfill()
+            }))
+        
+        scheduler.advance(by: 4)
+        
+        withExtendedLifetime(subscription) { wait(for: [expectation], timeout: 5.0) }
+        XCTAssertEqual(received, [].asEvents(completion: .finished))
+    }
 }

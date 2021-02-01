@@ -94,10 +94,6 @@ extension Publishers.TakeUntil {
                 switch state {
                 case .waiting(let initial):
                     
-                    guard demand > 0 else {
-                        return {}
-                    }
-                    
                     let sink = DemandableSubscriber<Output, Failure>(initialDemand: demand,
                                                                      receiveCompletion: { [unowned self] completion in
                                                                         self.receivedSource(completion)
