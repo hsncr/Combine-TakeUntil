@@ -10,6 +10,8 @@ import Foundation
 extension NSRecursiveLock {
     
     // MARK: block is executed inside lock to provide syncronous execution
+    @inlinable
+    @inline(__always)
     func synchronize<T>(_ block: () throws -> T) rethrows -> T {
         lock()
         defer { unlock() }
@@ -17,8 +19,13 @@ extension NSRecursiveLock {
     }
     
     // MARK: side effect is executed outside of lock to prevent deadlock
-    func synchronized(_ sideEffect: () throws -> (() -> Void)?) rethrows {
-        try synchronize(sideEffect)?()
+    @inlinable
+    @inline(__always)
+    func synchronized(_ block: (inout (() -> Void)?) -> Void)
+    {
+        var sideEffect: (() -> Void)?
+        synchronize { block(&sideEffect) }
+        sideEffect?()
     }
 }
 

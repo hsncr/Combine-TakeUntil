@@ -47,41 +47,40 @@ public class DemandableSubscriber<Input, Failure: Error>: Subscriber, Cancellabl
     
     // MARK: requested demand is passed through subscription if it is subscribed state
     public func requestDemand(_ demand: Subscribers.Demand) {
-        lock.synchronized {
+        lock.synchronized { sideEffect in
             if case let .subscribed(subscription) = state {
-                return { subscription.request(demand) }
+                sideEffect = { subscription.request(demand) }
             }
-            
-            return {}
         }
     }
 
     // MARK: Setup initial subscription demand or cancel received subscription if cancellation was already called
     public func receive(subscription: Subscription) {
-        lock.synchronized {
+        lock.synchronized { sideEffect in
+            
             if case .unsubscribed = state {
                 
                 self.state = .subscribed(subscription)
                 
-                return {
-                    if self.initialDemand != .none {
+                if self.initialDemand != .none {
+                    sideEffect = {
                         subscription.request(self.initialDemand)
                     }
                 }
             } else { // subscriber is cancelled before receiving subscription, cancel it upon receiving
-                return { subscription.cancel() }
+                sideEffect = {
+                    subscription.cancel()
+                }
             }
         }
     }
 
     // MARK: send values if state is subscribed, otherwise ignore
     public func receive(_ input: Input) -> Subscribers.Demand {
-        lock.synchronized {
+        lock.synchronized { sideEffect in
             if case .subscribed = state {
-                return { self.value(input) }
+                sideEffect = { self.value(input) }
             }
-
-            return {}
         }
         
         return .none
@@ -89,20 +88,17 @@ public class DemandableSubscriber<Input, Failure: Error>: Subscriber, Cancellabl
 
     // MARK: call completion block if state is subscribed, otherwise ignore
     public func receive(completion c: Subscribers.Completion<Failure>) {
-        lock.synchronized {
-            
+        lock.synchronized { sideEffect in
             if case .subscribed(_) = state {
                 state = .completed
-                return { self.completion(c) }
+                sideEffect = { self.completion(c) }
             }
-            
-            return {}
         }
     }
 
     // MARK: call cancellation on subscription if state is subscribed, otherwise ignore
     public func cancel() {
-        lock.synchronized {
+        lock.synchronized { sideEffect in
             var subscription: Subscription?
             
             if case .subscribed(let s) = state {
@@ -111,7 +107,7 @@ public class DemandableSubscriber<Input, Failure: Error>: Subscriber, Cancellabl
             
             state = .completed
             
-            return {
+            sideEffect = {
                 subscription?.cancel()
             }
         }

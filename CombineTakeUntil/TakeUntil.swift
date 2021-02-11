@@ -90,7 +90,7 @@ extension Publishers.TakeUntil {
 
         // configure demand. start source and other subscriptions if it is initial demand, otherwise request demand from source.
         func request(_ demand: Subscribers.Demand) {
-            lock.synchronized {
+            lock.synchronized {  sideEffect in
                 switch state {
                 case .waiting(let initial):
                     
@@ -115,7 +115,7 @@ extension Publishers.TakeUntil {
                                              remainingDemand: demand))
                     
                     
-                    return {
+                    sideEffect = {
                         
                         self.untilCancellable = AnyCancellable(untilSink)
                         
@@ -143,18 +143,16 @@ extension Publishers.TakeUntil {
                     state = .observing(container)
                     
                     // request demand from demandableSubscriber
-                    return { container.sink.requestDemand(demand) }
+                    sideEffect = { container.sink.requestDemand(demand) }
                 case .completed:
                     break
                 }
-                
-                return {}
             }
         }
 
         // received value from source publisher, handle it
         private func receivedSource(_ value: Output) {
-            lock.synchronized { 
+            lock.synchronized {  sideEffect in
                 
                 if case var .observing(container) = state {
                     
@@ -169,25 +167,19 @@ extension Publishers.TakeUntil {
                         
                         if additional > .none {
                             
-                            state = .observing(container)
-                            
-                            return { container.sink.requestDemand(additional) }
+                            sideEffect = { container.sink.requestDemand(additional) }
                         }
-                        
-                        state = .observing(container)
                         
                     }
                     
                     state = .observing(container)
                 }
-                
-                return {}
             }
         }
         
         // Received completion from source publisher, cancel other publisher and send completion event.
         private func receivedSource(_ completion: Subscribers.Completion<Failure>) {
-            lock.synchronized {
+            lock.synchronized { sideEffect in
                 
                 if case let .observing(container) = state {
                     
@@ -196,20 +188,17 @@ extension Publishers.TakeUntil {
                     let untilCancellable = self.untilCancellable
                     self.untilCancellable = nil
                     
-                    return {
+                    sideEffect = {
                         untilCancellable?.cancel()
                         container.downstream.receive(completion: completion)
                     }
                 }
-
-                return {}
             }
         }
         
         // Received value from other publisher, cancel both publishers and send completion event.
         private func receiveUntil(_ value: Other.Output) {
-            lock.synchronized {
-                
+            lock.synchronized { sideEffect in
                 if case let .observing(container) = state {
                     
                     let sourceCancellable = self.sourceCancellable
@@ -219,21 +208,18 @@ extension Publishers.TakeUntil {
                     
                     state = .completed
                     
-                    return {
+                    sideEffect = {
                         untilCancellable?.cancel()
                         sourceCancellable?.cancel()
                         container.downstream.receive(completion: .finished)
                     }
                 }
-
-                return {}
             }
         }
         
         // Received completion from other publisher, cancel source publisher and send completion event.
         private func receiveUntil(_ completion: Subscribers.Completion<Other.Failure>) {
-            lock.synchronized {
-                
+            lock.synchronized { sideEffect in
                 if case let .observing(container) = state {
 
                     let sourceCancellable = self.sourceCancellable
@@ -242,23 +228,21 @@ extension Publishers.TakeUntil {
                     
                     self.sourceCancellable = nil
 
-                    return {
+                    sideEffect = {
                         sourceCancellable?.cancel()
                         container.downstream.receive(completion: completion)
                     }
                 }
-
-                return {}
             }
         }
 
         
         // Received cancellation, cancel both publishers.
         func cancel() {
-            lock.synchronized {
+            lock.synchronized { sideEffect in
                 
                 if case .completed = state {
-                    return {}
+                    return 
                 }
                 
                 let sourceCancellable = self.sourceCancellable
@@ -269,7 +253,7 @@ extension Publishers.TakeUntil {
                 
                 self.state = .completed
 
-                return {
+                sideEffect = {
                     sourceCancellable?.cancel()
                     untilCancellable?.cancel()
                 }
